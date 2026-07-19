@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,7 +15,17 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from control_plane.config import AppConfig, DEFAULT_CONFIG
 from control_plane.data import CANONICAL_COLUMNS, infer_mapping, read_csv
-from control_plane.service import ControlPlane
+from control_plane import db as db_module
+from control_plane import service as service_module
+
+# Streamlit Cloud can hot-reload app.py while retaining imported local modules.
+# Refresh an older backend module before constructing the app service so a
+# deployment cannot combine the new UI with a stale ControlPlane class.
+if not hasattr(service_module.ControlPlane, "setup_status"):
+    importlib.reload(db_module)
+    service_module = importlib.reload(service_module)
+
+ControlPlane = service_module.ControlPlane
 
 
 st.set_page_config(page_title="AI Workflow Control Plane", page_icon="◈", layout="wide", initial_sidebar_state="expanded")
@@ -45,12 +56,11 @@ st.markdown(
 )
 
 
-@st.cache_resource
-def get_plane(build_version: str = "navigation-v2") -> ControlPlane:
+def get_plane() -> ControlPlane:
     return ControlPlane(ROOT / "data" / "control_plane.db")
 
 
-plane = get_plane("navigation-v2")
+plane = get_plane()
 
 PROVIDED_DATASET = Path.home() / "Downloads" / "aa_dataset-tickets-multi-lang-5-2-50-version (1).csv"
 DEFAULT_DATASET = PROVIDED_DATASET if PROVIDED_DATASET.exists() else ROOT / "data" / "sample_tickets.csv"
