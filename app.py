@@ -24,7 +24,11 @@ st.markdown(
     :root { --ink:#10231f; --muted:#65736f; --accent:#0f766e; --mint:#dff7f1; --amber:#fff2cc; --red:#ffe3e3; }
     .stApp { background: #f6f8f7; color: var(--ink); }
     [data-testid="stSidebar"] { background: #10231f; }
-    [data-testid="stSidebar"] * { color: #eef7f4; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label { color: #eef7f4; }
+    [data-testid="stSidebar"] button[kind="secondary"] { background:#f6f8f7 !important; border-color:#dce5e2 !important; }
+    [data-testid="stSidebar"] button[kind="secondary"] * { color:#10231f !important; }
+    [data-testid="stSidebar"] button[kind="primary"] * { color:#ffffff !important; }
     [data-testid="stMetric"] { background:white; border:1px solid #dce5e2; border-radius:14px; padding:16px; box-shadow:0 4px 18px rgba(16,35,31,.05); }
     .hero { padding:34px; border-radius:24px; color:white; background:linear-gradient(135deg,#10231f,#0f766e); margin-bottom:24px; }
     .hero h1 { font-size:44px; line-height:1.05; margin:0 0 12px; }
@@ -42,11 +46,11 @@ st.markdown(
 
 
 @st.cache_resource
-def get_plane() -> ControlPlane:
+def get_plane(build_version: str = "navigation-v2") -> ControlPlane:
     return ControlPlane(ROOT / "data" / "control_plane.db")
 
 
-plane = get_plane()
+plane = get_plane("navigation-v2")
 
 PROVIDED_DATASET = Path.home() / "Downloads" / "aa_dataset-tickets-multi-lang-5-2-50-version (1).csv"
 DEFAULT_DATASET = PROVIDED_DATASET if PROVIDED_DATASET.exists() else ROOT / "data" / "sample_tickets.csv"
@@ -76,7 +80,10 @@ def ticket_selector(data: pd.DataFrame, key: str, label: str = "Ticket") -> str 
         st.info("No tickets are available yet. Load and process a dataset first.")
         return None
     labels = {row.ticket_id: f"{row.ticket_id} — {row.subject[:70]}" for row in data.itertuples()}
-    selected = st.selectbox(label, list(labels), format_func=labels.get, key=key)
+    options = list(labels)
+    remembered = st.session_state.get("selected_ticket")
+    index = options.index(remembered) if remembered in options else 0
+    selected = st.selectbox(label, options, index=index, format_func=labels.get, key=key)
     st.session_state.selected_ticket = selected
     return selected
 
@@ -153,7 +160,7 @@ def ingestion() -> None:
         normalized = plane.normalize_pending()
         st.success(f"Saved {count} tickets and created {normalized} local normalization records.")
     if plane.db.count("tickets") and st.button("Continue to processing"):
-        set_screen("Model Predictions"); st.rerun()
+        st.session_state.mode = "Setup"; st.session_state.setup_step = 2; st.rerun()
 
 
 def explorer() -> None:
@@ -216,7 +223,7 @@ def predictions() -> None:
 
 
 def policy_console() -> None:
-    header("Policy Engine Console", "Change governance rules and immediately see downstream routing outcomes.")
+    header("Why tickets get flagged", "Adjust the conditions that pause automation or add a warning.")
     config = plane.config
     with st.form("policy_form"):
         c1, c2 = st.columns(2)
@@ -282,8 +289,12 @@ def routing() -> None:
         st.success("Added to the review queue."); st.rerun()
 
 
-def review_queue() -> None:
-    header("Human Review Queue", "Resolve policy exceptions while preserving full decision lineage.")
+def review_queue(show_header: bool = True) -> None:
+    if show_header:
+        header("Needs Your Review", "Resolve flagged tickets while preserving the reason and final decision.")
+    else:
+        st.subheader("Needs Your Review")
+        st.caption("Finalize the tickets that automation intentionally paused.")
     queue = plane.review_queue()
     if queue.empty:
         st.success("No tickets are waiting for review."); return
@@ -304,14 +315,22 @@ def review_queue() -> None:
         st.caption(f"Method: {row.normalization_method} · Status: {row.normalization_status} · Confidence: {row.normalization_confidence:.0%}")
         st.caption(f"Tags: {row.tags or 'none'}")
         st.info(f"AI rationale: {row.explanation_text}\n\nPolicy rationale: {row.rationale}")
-    with right, st.form("review_form"):
-        decision = st.radio("Decision", ["approve", "reroute", "reject"], horizontal=True)
-        reviewer = st.text_input("Reviewer", plane.config.default_reviewer)
-        final_queue = st.text_input("Final queue", row.destination_queue)
-        final_priority = st.selectbox("Final priority", ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(row.priority_pred))
-        final_type = st.text_input("Final type", row.type_pred)
-        notes = st.text_area("Reviewer notes", placeholder="Explain any override or rejection...")
-        submitted = st.form_submit_button("Submit decision", type="primary")
+    with right:
+        decision = st.radio("What should happen?", ["approve", "reroute", "reject"], horizontal=True, key=f"decision_{selected}")
+        reviewer = st.text_input("Reviewed by", plane.config.default_reviewer, key=f"reviewer_{selected}")
+        final_queue = st.text_input("Final queue", row.destination_queue, key=f"queue_{selected}")
+        priorities = ["Low", "Medium", "High"]
+        priority_index = priorities.index(row.priority_pred) if row.priority_pred in priorities else 1
+        final_priority = st.selectbox("Final priority", priorities, index=priority_index, key=f"priority_{selected}")
+        final_type = st.text_input("Final ticket type", row.type_pred, key=f"type_{selected}")
+        notes = st.text_area("Reviewer notes", placeholder="Explain any override or rejection...", key=f"notes_{selected}")
+        missing = []
+        if not final_queue.strip(): missing.append("final queue")
+        if not final_priority.strip(): missing.append("final priority")
+        if not final_type.strip(): missing.append("final ticket type")
+        if missing:
+            st.warning("Before finalizing, provide: " + ", ".join(missing) + ".")
+        submitted = st.button("Finalize decision", type="primary", disabled=bool(missing), key=f"submit_{selected}")
     if submitted:
         plane.review(selected, decision, reviewer, notes, final_queue, final_priority, final_type)
         st.success("Reviewer decision stored with full traceability."); st.rerun()
@@ -334,7 +353,7 @@ def audit_trail() -> None:
 
 
 def analytics() -> None:
-    header("Analytics Dashboard", "Measure model quality, policy behavior, and operational outcomes together.")
+    header("Performance", "Measure recommendation quality, review workload, and operating outcomes together.")
     result = plane.analytics(); data = result["data"]
     if data.empty:
         st.info("Process tickets to populate analytics."); return
@@ -376,27 +395,34 @@ def analytics() -> None:
 
 
 def export_page() -> None:
-    header("Export / Downstream Action", "Package final actions for handoff without breaking lineage.")
+    header("Approved handoffs", "Package completed decisions without losing their history.")
     actions = plane.export_actions()
     if actions.empty:
         st.info("No approved or rejected actions are ready for export."); return
     a, b, c = st.columns(3); a.metric("Ready records", len(actions)); b.metric("Approved", int((actions.status == "approved").sum())); c.metric("Rejected", int((actions.status == "rejected").sum()))
+    blocked = actions[actions["normalization_status"].isin(["failed", "unsupported"]) & actions["body_normalized"].fillna("").eq("")]
+    eligible = actions.drop(blocked.index)
     st.dataframe(actions, width="stretch", hide_index=True)
-    st.download_button("Download final actions CSV", actions.to_csv(index=False).encode(), "governed-support-actions.csv", "text/csv", type="primary")
+    if not blocked.empty:
+        st.warning(f"{len(blocked)} ticket(s) cannot be exported because language preparation failed and no fallback text exists. Open Needs Your Review and provide a safe final route first.")
+    st.download_button("Download eligible final actions", eligible.to_csv(index=False).encode(), "governed-support-actions.csv", "text/csv", type="primary", disabled=eligible.empty)
     if plane.config.jira_payload_enabled:
-        selected = st.selectbox("Jira-ready payload preview", actions.ticket_id.tolist())
-        st.json(plane.jira_payload(selected))
+        if eligible.empty:
+            st.warning("Jira preview is unavailable until at least one completed ticket has safe prepared text.")
+        else:
+            selected = st.selectbox("Jira-ready payload preview", eligible.ticket_id.tolist())
+            st.json(plane.jira_payload(selected))
     st.divider()
     if st.button("Reset demo state"):
         st.session_state.confirm_reset = True
     if st.session_state.get("confirm_reset"):
         st.warning("This permanently removes local demo tickets, predictions, reviews, and audit events.")
         if st.button("Confirm reset", type="primary"):
-            plane.db.reset(); st.session_state.confirm_reset = False; st.success("Demo state reset."); st.rerun()
+            plane.start_new_dataset(); st.session_state.confirm_reset = False; st.session_state.mode = "Setup"; st.session_state.setup_step = 1; st.success("Demo state reset."); st.rerun()
 
 
 def admin() -> None:
-    header("Admin / Configuration", "Centralize reusable settings for demo operation and policy iteration.")
+    header("Settings", "Manage reusable defaults for the local workflow.")
     config = plane.config
     with st.form("admin_form"):
         c1, c2 = st.columns(2)
@@ -443,22 +469,279 @@ def case_study() -> None:
     st.markdown("- A local TF-IDF linear pipeline keeps classification explainable and credential-free.\n- Original language is immutable; normalization is a separate, fully audited layer.\n- Confidence never acts alone; language failures and explicit safeguards represent operational risk.\n- Review friction is concentrated on exceptions, while routine cases remain fast.")
 
 
-RENDERERS = {
-    "Overview": overview, "Dataset Ingestion": ingestion, "Ticket Explorer": explorer,
-    "Model Predictions": predictions, "Policy Engine": policy_console, "Routing Decisions": routing,
-    "Human Review Queue": review_queue, "Audit Trail": audit_trail, "Analytics": analytics,
-    "Export": export_page, "Admin": admin, "Portfolio Case Study": case_study,
-}
+def mode_label(name: str, detail: str) -> None:
+    st.markdown(f"<span class='pill'>{name.upper()}</span> <span class='muted'>{detail}</span>", unsafe_allow_html=True)
+
+
+def setup_progress(status: dict[str, bool], current: int) -> None:
+    steps = [
+        (1, "Load Data", status["loaded"]),
+        (2, "Normalize and Predict", status["processed"]),
+        (3, "Confirm Policy Settings", status["policy_confirmed"]),
+    ]
+    for number, label, complete in steps:
+        allowed = number == 1 or steps[number - 2][2]
+        prefix = "✓" if complete else str(number)
+        if st.button(f"{prefix}  {label}", key=f"setup_rail_{number}", disabled=not allowed, type="primary" if current == number else "secondary", width="stretch"):
+            st.session_state.setup_step = number
+            st.rerun()
+
+
+def setup_load_data() -> None:
+    header("Load Data", "Choose the support-ticket file and confirm that its required fields are usable.")
+    default_label = "Provided multilingual dataset" if PROVIDED_DATASET.exists() else "Bundled sample dataset"
+    source_choice = st.radio("Where should tickets come from?", [default_label, "Upload CSV"], horizontal=True, key="setup_source")
+    source = DEFAULT_DATASET if source_choice == default_label else st.file_uploader("Choose a CSV", type=["csv"], key="setup_upload")
+    if source is None:
+        st.info("Choose a CSV to continue.")
+        return
+    try:
+        raw = read_csv(source)
+    except Exception as exc:
+        st.error(f"This file could not be read: {exc}")
+        return
+    inferred = infer_mapping(list(raw.columns))
+    mapping: dict[str, str] = {}
+    with st.expander("Check field matching", expanded=False):
+        options = ["Ignore"] + CANONICAL_COLUMNS
+        mapping_columns = st.columns(3)
+        for index, column in enumerate(raw.columns):
+            default = inferred.get(column, "Ignore")
+            selected = mapping_columns[index % 3].selectbox(str(column), options, index=options.index(default), key=f"setup_map_{column}")
+            if selected != "Ignore": mapping[column] = selected
+    from control_plane.data import assess_quality
+    quality = assess_quality(raw, mapping)
+    q1, q2, q3, q4 = st.columns(4)
+    q1.metric("Source rows", f"{quality.rows:,}")
+    q2.metric("Usable tickets", f"{quality.valid_rows:,}")
+    q3.metric("Duplicate IDs", quality.duplicate_ids)
+    q4.metric("Optional fields", moneyless_percent(quality.optional_coverage))
+    language_source = next((column for column, target in mapping.items() if target == "language"), None)
+    if language_source:
+        counts = raw[language_source].fillna("unknown").astype(str).str.lower().value_counts().rename_axis("language").reset_index(name="tickets")
+        st.plotly_chart(px.bar(counts, x="language", y="tickets", color="language", title="Languages in this file"), width="stretch")
+    for issue in quality.issues:
+        st.caption(f"• {issue}")
+    st.dataframe(raw.head(20), width="stretch", hide_index=True)
+    if st.button("Save tickets and continue", type="primary", disabled=not quality.is_valid):
+        count, _ = plane.ingest(raw, mapping)
+        plane.db.set_state("setup_started", "true")
+        st.session_state.setup_step = 2
+        st.success(f"Saved {count:,} tickets.")
+        st.rerun()
+
+
+def setup_prepare_tickets() -> None:
+    header("Normalize and Predict", "Prepare multilingual text locally and generate routing recommendations.")
+    data = plane.ticket_view()
+    if data.empty:
+        st.warning("Load tickets before preparing recommendations.")
+        return
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Tickets ready", f"{len(data):,}")
+    c2.metric("Languages", int(data["language"].replace("", "unknown").nunique()))
+    c3.metric("External API keys", "Not required")
+    st.info("Original messages remain unchanged. The app creates a separate English-ready text layer, then uses local linear models to recommend a team, urgency, and ticket type.")
+    if st.button("Prepare tickets and generate recommendations", type="primary"):
+        with st.spinner("Preparing multilingual tickets and generating recommendations..."):
+            processed = plane.process()
+        st.session_state.setup_step = 3
+        st.success(f"Prepared and scored {processed:,} tickets.")
+        st.rerun()
+
+
+def setup_confirm_policy() -> None:
+    header("Confirm Policy Settings", "Choose when the system should pause and ask a person to review a ticket.")
+    config = plane.config
+    with st.form("setup_policy_form"):
+        c1, c2 = st.columns(2)
+        review = c1.slider("Ask for human review below", 0.3, 0.9, config.review_threshold, 0.01)
+        warning = c2.slider("Add a warning below", review, 0.98, max(review, config.warning_threshold), 0.01)
+        risk = st.text_area("Words that should trigger extra care", ", ".join(config.risk_keywords))
+        tags = st.text_area("Tags that always need review", ", ".join(config.restricted_tags))
+        high = st.toggle("Review high-urgency tickets unless confidence is very strong", config.high_priority_requires_review)
+        submitted = st.form_submit_button("Save settings and open Operations", type="primary")
+    if submitted:
+        config.review_threshold = review
+        config.warning_threshold = warning
+        config.risk_keywords = [item.strip() for item in risk.split(",") if item.strip()]
+        config.restricted_tags = [item.strip() for item in tags.split(",") if item.strip()]
+        config.high_priority_requires_review = high
+        with st.spinner("Applying these settings to the current tickets..."):
+            plane.save_config(config)
+            plane.confirm_policy_setup()
+        st.session_state.mode = "Operations"
+        st.session_state.ops_tab = "Inbox"
+        st.success("Setup complete. Operations is ready.")
+        st.rerun()
+
+
+def setup_mode() -> None:
+    status = plane.setup_status()
+    default_step = 1 if not status["loaded"] else 2 if not status["processed"] else 3
+    current = int(st.session_state.get("setup_step", default_step))
+    if current > 1 and not status["loaded"]: current = 1
+    if current > 2 and not status["processed"]: current = 2
+    st.session_state.setup_step = current
+    mode_label("Setup Mode", "Complete these three required steps once for each dataset.")
+    st.divider()
+    {1: setup_load_data, 2: setup_prepare_tickets, 3: setup_confirm_policy}[current]()
+
+
+def inbox_view() -> None:
+    header("Inbox", "Browse tickets and open one to see the recommendation and why it was flagged.")
+    data = plane.ticket_view().dropna(subset=["queue_pred"])
+    if data.empty:
+        st.info("No prepared tickets are available yet.")
+        return
+    search = st.text_input("Find a ticket", placeholder="Search subject, message, ticket ID, or tag...", key="inbox_search")
+    f1, f2, f3 = st.columns(3)
+    languages = f1.multiselect("Language", sorted(data.language_source.dropna().unique()), key="inbox_languages")
+    priorities = f2.multiselect("Recommended urgency", sorted(data.priority_pred.dropna().unique()), key="inbox_priorities")
+    destinations = f3.multiselect("Recommended team", sorted(data.destination_queue.dropna().unique()), key="inbox_destinations")
+    shown = data
+    if languages: shown = shown[shown.language_source.isin(languages)]
+    if priorities: shown = shown[shown.priority_pred.isin(priorities)]
+    if destinations: shown = shown[shown.destination_queue.isin(destinations)]
+    if search:
+        mask = shown[["ticket_id", "subject", "body", "tags"]].fillna("").apply(lambda col: col.str.contains(search, case=False, regex=False)).any(axis=1)
+        shown = shown[mask]
+    st.dataframe(shown[["ticket_id", "subject", "language_source", "priority_pred", "destination_queue", "final_action", "status"]], width="stretch", hide_index=True)
+    if shown.empty:
+        st.info("No tickets match these filters.")
+        return
+    labels = {row.ticket_id: f"{row.ticket_id} — {row.subject[:70]}" for row in shown.itertuples()}
+    options = list(labels)
+    remembered = st.session_state.get("selected_ticket")
+    index = options.index(remembered) if remembered in options else None
+    selected = st.selectbox("Open a ticket", options, index=index, format_func=labels.get, placeholder="Choose a ticket to see its recommendation", key="inbox_ticket")
+    if not selected:
+        st.info("Choose a ticket above to reveal its message, recommendation, and flagging reason.")
+        return
+    st.session_state.selected_ticket = selected
+    row = shown[shown.ticket_id == selected].iloc[0]
+    original, prepared = st.columns(2)
+    with original:
+        st.caption(f"ORIGINAL · {str(row.language_source).upper()}")
+        st.subheader(row.subject)
+        st.write(row.body)
+    with prepared:
+        st.caption("ENGLISH-READY TEXT")
+        st.subheader(row.subject_normalized)
+        st.write(row.body_normalized)
+    st.divider()
+    p1, p2, p3 = st.columns(3)
+    p1.metric("Recommended team", row.queue_pred, f"{row.confidence_queue:.0%} confidence")
+    p2.metric("Recommended urgency", row.priority_pred, f"{row.confidence_priority:.0%} confidence")
+    p3.metric("Recommended type", row.type_pred, f"{row.confidence_type:.0%} confidence")
+    action_text = {"auto_route": "Ready to route automatically", "auto_route_warning": "Ready with a warning", "human_review": "Waiting for a person"}.get(row.final_action, row.final_action)
+    st.markdown(f"<div class='decision'><div class='eyebrow' style='color:#0f766e'>What should happen next</div><h3>{action_text}</h3><p>This ticket should go to: <strong>{row.destination_queue}</strong></p><p class='muted'>{row.rationale}</p></div>", unsafe_allow_html=True)
+    with st.expander("Why this recommendation?"):
+        st.write(row.explanation_text)
+        trace = plane.ticket_trace(selected)
+        if not trace["rules"]:
+            st.success("No extra review rules were triggered.")
+        for rule in trace["rules"]:
+            detail = json.loads(rule["rule_result"]).get("detail", "")
+            st.warning(f"**{rule['rule_name']}** — {detail}")
+
+
+def history_view() -> None:
+    header("What Happened", "See the recommendation, final outcome, and history for one ticket in plain language.")
+    data = plane.ticket_view().dropna(subset=["final_action"])
+    selected = ticket_selector(data, "history_ticket", "Ticket to trace")
+    if not selected:
+        return
+    trace = plane.ticket_trace(selected)
+    ticket, prediction, decision = trace["ticket"], trace["prediction"], trace["decision"]
+    action_text = {"auto_route": "Routed automatically", "auto_route_warning": "Routed with a warning", "human_review": "Sent to a person"}.get(decision.get("final_action"), decision.get("final_action"))
+    st.markdown(f"<div class='decision'><div class='eyebrow' style='color:#0f766e'>Outcome</div><h2>{action_text}</h2><p>This ticket should go to: <strong>{decision.get('destination_queue')}</strong></p><p class='muted'>{decision.get('rationale')}</p></div>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Recommended team", prediction.get("queue_pred"), f"{prediction.get('confidence_queue',0):.0%}")
+    c2.metric("Recommended urgency", prediction.get("priority_pred"), f"{prediction.get('confidence_priority',0):.0%}")
+    c3.metric("Current status", str(decision.get("status", "")).replace("_", " ").title())
+    st.subheader("History for this ticket")
+    for event in trace["audit"]:
+        friendly_stage = {"ingestion": "Ticket received", "normalization": "Language prepared", "prediction": "Recommendation created", "policy": "Flagging rules checked", "review": "Person finalized decision"}.get(event["stage"], event["stage"].replace("_", " ").title())
+        with st.expander(f"{friendly_stage} · {event['event_time']}"):
+            st.caption(f"By {event['actor']}")
+            st.json(json.loads(event["payload"]))
+    st.download_button("Download this ticket history", pd.DataFrame(trace["audit"]).to_csv(index=False).encode(), f"history-{selected}.csv", "text/csv")
+
+
+def operations_mode() -> None:
+    status = plane.overview()
+    mode_label("Operations Mode", "Daily workspace · all tabs remain available")
+    if not st.session_state.get("operations_tip_seen"):
+        st.info("Start in Inbox to inspect tickets, open Needs Your Review for exceptions, or jump directly to history and performance at any time.")
+        st.session_state.operations_tip_seen = True
+    options = ["Inbox", "Review", "History", "Performance"]
+    labels = {"Inbox": "📥 Inbox", "Review": f"👩‍💼 Needs Your Review · {status['pending_review']:,}", "History": "🔎 What Happened", "Performance": "📊 Performance"}
+    selected = st.segmented_control("Operations", options, default=st.session_state.get("ops_tab", "Inbox"), format_func=lambda value: labels[value], key="ops_tab", label_visibility="collapsed", width="stretch")
+    st.divider()
+    {"Inbox": inbox_view, "Review": lambda: review_queue(False), "History": history_view, "Performance": analytics}[selected or "Inbox"]()
+
+
+def data_and_setup_admin() -> None:
+    header("Data & setup", "Review setup progress or explicitly begin work with a new dataset.")
+    status = plane.setup_status()
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Data loaded", "Complete" if status["loaded"] else "Not started")
+    c2.metric("Recommendations ready", "Complete" if status["processed"] else "Not started")
+    c3.metric("Flagging rules confirmed", "Complete" if status["policy_confirmed"] else "Not started")
+    if st.button("Review setup steps"):
+        st.session_state.mode = "Setup"
+        st.session_state.setup_step = 1
+        st.rerun()
+    st.divider()
+    st.subheader("Start a new dataset")
+    st.caption("This clears local tickets, recommendations, reviews, and history before returning to Setup Mode.")
+    if st.button("Start a new dataset", type="secondary"):
+        st.session_state.confirm_new_dataset = True
+    if st.session_state.get("confirm_new_dataset"):
+        st.warning("This removes the current local workflow data. Configuration defaults remain available.")
+        if st.button("Confirm and clear current data", type="primary"):
+            plane.start_new_dataset()
+            st.session_state.confirm_new_dataset = False
+            st.session_state.mode = "Setup"
+            st.session_state.setup_step = 1
+            st.rerun()
+
+
+def admin_setup_mode() -> None:
+    mode_label("Admin & Setup", "Configuration and portfolio tools · separated from daily review work")
+    options = ["Data", "Rules", "Settings", "Exports", "Portfolio"]
+    labels = {"Data": "🗂️ Data & setup", "Rules": "🛡️ Why tickets get flagged", "Settings": "⚙️ Settings", "Exports": "📦 Exports", "Portfolio": "✨ Portfolio story"}
+    selected = st.segmented_control("Admin tools", options, default=st.session_state.get("admin_tab", "Data"), format_func=lambda value: labels[value], key="admin_tab", label_visibility="collapsed", width="stretch")
+    st.divider()
+    {"Data": data_and_setup_admin, "Rules": policy_console, "Settings": admin, "Exports": export_page, "Portfolio": case_study}[selected or "Data"]()
+
+
+setup_status = plane.setup_status()
+if not setup_status["complete"]:
+    st.session_state.mode = "Setup"
+elif "mode" not in st.session_state:
+    st.session_state.mode = "Operations"
 
 with st.sidebar:
     st.markdown("## ◈ Control Plane")
-    st.caption("Support Operations · MVP")
-    current = st.session_state.get("screen", "Overview")
-    selected_screen = st.radio("Navigate", SCREENS, index=SCREENS.index(current), label_visibility="collapsed")
-    st.session_state.screen = selected_screen
+    st.caption("Support Operations · No-API MVP")
+    current_mode = st.session_state.get("mode", "Setup")
+    st.markdown(f"<span class='pill'>{current_mode.upper()}</span>", unsafe_allow_html=True)
+    st.divider()
+    if current_mode == "Setup":
+        setup_progress(setup_status, int(st.session_state.get("setup_step", 1)))
+    elif setup_status["complete"]:
+        if st.button("📥 Operations", type="primary" if current_mode == "Operations" else "secondary", width="stretch"):
+            st.session_state.mode = "Operations"; st.rerun()
+        if st.button("⚙️ Admin & Setup", type="primary" if current_mode == "Admin & Setup" else "secondary", width="stretch"):
+            st.session_state.mode = "Admin & Setup"; st.rerun()
+    else:
+        st.info("Finish Setup Mode to open the daily operations workspace.")
     st.divider()
     status = plane.overview()
-    st.caption(f"{status['tickets']} tickets · {status['pending_review']} awaiting review")
-    st.caption(f"Model: {plane.config.model_version}")
+    st.caption(f"{status['tickets']:,} tickets")
+    st.caption(f"{status['pending_review']:,} need review")
+    st.caption(f"Local model: {plane.config.model_version}")
 
-RENDERERS[st.session_state.screen]()
+{"Setup": setup_mode, "Operations": operations_mode, "Admin & Setup": admin_setup_mode}[st.session_state.mode]()

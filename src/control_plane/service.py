@@ -79,6 +79,30 @@ class ControlPlane:
             "audit_events": self.db.count("audit_log"),
         }
 
+    def setup_status(self) -> dict[str, bool]:
+        tickets = self.db.count("tickets")
+        loaded = tickets > 0
+        processed = loaded and self.db.count("predictions") == tickets and self.db.count("normalizations") == tickets
+        confirmed = self.db.get_state("policy_confirmed") == "true"
+        if processed and not self.db.get_state("setup_started") and not self.db.get_state("setup_complete") and not self.db.get_state("policy_confirmed"):
+            # Existing installations were already configured before the two-mode redesign.
+            confirmed = True
+            self.db.set_state("policy_confirmed", "true")
+            self.db.set_state("setup_complete", "true")
+        complete = loaded and processed and confirmed
+        return {"loaded": loaded, "processed": processed, "policy_confirmed": confirmed, "complete": complete}
+
+    def confirm_policy_setup(self) -> None:
+        self.db.set_state("setup_started", "true")
+        self.db.set_state("policy_confirmed", "true")
+        self.db.set_state("setup_complete", "true")
+        self.db.audit(None, "setup", "operator", "setup_completed", self.setup_status())
+
+    def start_new_dataset(self) -> None:
+        self.db.reset(reset_setup=True)
+        self.db.set_state("setup_started", "true")
+        self.db.audit(None, "setup", "operator", "new_dataset_started", {})
+
     def ticket_view(self) -> pd.DataFrame:
         return self.db.dataframe(
             "SELECT t.*, t.subject subject_original, t.body body_original, n.subject_normalized, n.body_normalized, "
@@ -149,8 +173,10 @@ class ControlPlane:
 
     def export_actions(self) -> pd.DataFrame:
         return self.db.dataframe(
-            "SELECT t.ticket_id, t.subject, COALESCE(r.final_queue,d.destination_queue) final_queue, COALESCE(r.final_priority,p.priority_pred) final_priority, COALESCE(r.final_type,p.type_pred) final_type, d.status, r.reviewer_decision, r.reviewer_notes, d.completed_at "
-            "FROM tickets t JOIN predictions p USING(ticket_id) JOIN routing_decisions d USING(ticket_id) "
+            "SELECT t.ticket_id, t.subject, COALESCE(r.final_queue,d.destination_queue) final_queue, "
+            "COALESCE(r.final_priority,p.priority_pred) final_priority, COALESCE(r.final_type,p.type_pred) final_type, "
+            "n.normalization_status, n.subject_normalized, n.body_normalized, d.status, r.reviewer_decision, r.reviewer_notes, d.completed_at "
+            "FROM tickets t JOIN normalizations n USING(ticket_id) JOIN predictions p USING(ticket_id) JOIN routing_decisions d USING(ticket_id) "
             "LEFT JOIN review_actions r ON r.id=(SELECT MAX(id) FROM review_actions WHERE ticket_id=t.ticket_id) WHERE d.status IN ('approved','rejected') ORDER BY t.ticket_id"
         )
 

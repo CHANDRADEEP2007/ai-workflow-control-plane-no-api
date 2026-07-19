@@ -28,6 +28,13 @@ The workflow is intentionally simple:
 Ingest → Normalize → Predict → Safeguard → Review → Trace
 ```
 
+### Two-mode navigation
+
+- **Setup Mode** is a required three-step path for each new dataset: **Load Data → Normalize and Predict → Confirm Policy Settings**. Completed steps show a checkmark, backward navigation remains available, and unfinished forward steps stay locked.
+- **Operations Mode** is an always-open daily console with four task tabs: **Inbox**, **Needs Your Review**, **What Happened**, and **Performance**. Ticket context follows the user between relevant tabs.
+- **Admin & Setup** visually separates dataset controls, flagging rules, settings, exports, and portfolio material from frontline review work.
+- Navigation remains open during daily operations; only irreversible actions such as finalizing an incomplete review or exporting unsafe text are blocked, with a specific inline reason.
+
 - **Original text stays immutable.** Normalized English is stored as a separate, inspectable layer.
 - **Recommendations are never silent.** Queue, priority, type, confidence, and model signals remain visible.
 - **Policy sits between prediction and action.** Confidence, language, tags, keywords, and priority can stop automation.

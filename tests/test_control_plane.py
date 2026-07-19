@@ -125,3 +125,18 @@ def test_audit_payloads_are_valid_json(tmp_path: Path) -> None:
     plane.process()
     for event in plane.ticket_trace("A-1")["audit"]:
         assert isinstance(json.loads(event["payload"]), dict)
+
+
+def test_three_step_setup_state_is_persistent_and_sequential(tmp_path: Path) -> None:
+    plane = ControlPlane(tmp_path / "control.db")
+    plane.start_new_dataset()
+    assert plane.setup_status() == {"loaded": False, "processed": False, "policy_confirmed": False, "complete": False}
+    plane.ingest(sample_frame())
+    assert plane.setup_status()["loaded"] and not plane.setup_status()["processed"]
+    plane.process()
+    status = plane.setup_status()
+    assert status["loaded"] and status["processed"] and not status["policy_confirmed"] and not status["complete"]
+    plane.confirm_policy_setup()
+    assert ControlPlane(plane.db.path).setup_status()["complete"]
+    plane.start_new_dataset()
+    assert not plane.setup_status()["complete"]

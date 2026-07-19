@@ -81,6 +81,9 @@ class Database:
                 CREATE TABLE IF NOT EXISTS app_config (
                     id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS app_state (
+                    key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_policy_events_ticket ON policy_events(ticket_id);
                 CREATE INDEX IF NOT EXISTS idx_normalizations_status ON normalizations(normalization_status);
                 CREATE INDEX IF NOT EXISTS idx_normalizations_language ON normalizations(language_source);
@@ -121,6 +124,18 @@ class Database:
                 (json.dumps(config.to_dict()), utcnow()),
             )
         self.audit(None, "configuration", "admin", "config_updated", config.to_dict())
+
+    def get_state(self, key: str, default: str = "") -> str:
+        rows = self.query("SELECT value FROM app_state WHERE key=?", (key,))
+        return str(rows[0]["value"]) if rows else default
+
+    def set_state(self, key: str, value: str) -> None:
+        with self.connect() as con:
+            con.execute(
+                "INSERT INTO app_state(key,value,updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                (key, value, utcnow()),
+            )
 
     def upsert_tickets(self, frame: pd.DataFrame) -> int:
         now = utcnow()
@@ -267,7 +282,9 @@ class Database:
                 (ticket_id, stage, actor, action, json.dumps(payload, default=str), utcnow()),
             )
 
-    def reset(self) -> None:
+    def reset(self, reset_setup: bool = False) -> None:
         with self.connect() as con:
             for table in ("review_actions", "policy_events", "routing_decisions", "predictions", "normalizations", "tickets", "audit_log"):
                 con.execute(f"DELETE FROM {table}")
+            if reset_setup:
+                con.execute("DELETE FROM app_state WHERE key IN ('setup_started','setup_complete','policy_confirmed')")
