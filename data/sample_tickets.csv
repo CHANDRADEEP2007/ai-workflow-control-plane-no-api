@@ -1,0 +1,32 @@
+ticket_id,subject,body,language,queue_actual,priority_actual,type_actual,business_type,tags,created_at
+TKT-1001,Production API returns 503,"Our checkout integration is down in production and every API request fails with a 503 error.",en,Technical Support,High,Incident,E-commerce,"api,outage",2026-07-15T08:10:00Z
+TKT-1002,Refund for duplicate charge,"We were charged twice on invoice 8841. Please issue a refund for the duplicate payment.",en,Billing,Medium,Request,Retail,"billing dispute,refund",2026-07-15T08:28:00Z
+TKT-1003,Locked out after MFA reset,"The admin is locked out and cannot sign in after changing the MFA device.",en,Account Access,High,Incident,Healthcare,"account access,mfa",2026-07-15T08:42:00Z
+TKT-1004,How do I add a new teammate?,"Where can I invite another user and choose their permissions?",en,Customer Success,Low,Question,Professional Services,"onboarding",2026-07-15T09:05:00Z
+TKT-1005,Suspicious login from another country,"We saw an unauthorized login and suspect a security breach. Please investigate urgently.",en,Security,High,Incident,Financial Services,"security,account access",2026-07-15T09:21:00Z
+TKT-1006,Invoice address is wrong,"Please update the billing address shown on our next invoice.",en,Billing,Medium,Request,Manufacturing,"billing",2026-07-15T09:48:00Z
+TKT-1007,Desktop client crashes on launch,"The Windows app crashes immediately after installing version 6.2.",en,Technical Support,High,Problem,Education,"desktop,bug",2026-07-15T10:15:00Z
+TKT-1008,Question about feature availability,"What plan includes the advanced reporting feature?",en,Customer Success,Low,Question,SaaS,"product question",2026-07-15T10:32:00Z
+TKT-1009,Phishing email sent to staff,"Several employees received a phishing message that links to a fake sign-in page.",en,Security,High,Incident,Government,"security,phishing",2026-07-15T10:55:00Z
+TKT-1010,Subscription upgrade request,"Please upgrade our subscription to the enterprise plan next month.",en,Customer Success,Medium,Request,Media,"subscription,upgrade",2026-07-15T11:20:00Z
+TKT-1011,La integración devuelve un error,"La integración de pagos no funciona y muestra un error después de instalar la actualización.",es,Technical Support,Medium,Problem,E-commerce,"api,integration",2026-07-15T11:43:00Z
+TKT-1012,Demande de remboursement,"Je souhaite un remboursement pour un paiement incorrect sur la dernière facture.",fr,Billing,Medium,Request,Hospitality,"billing dispute",2026-07-15T12:10:00Z
+TKT-1013,Documentation typo,"There is a minor cosmetic typo in the API documentation. No urgent impact.",en,Technical Support,Low,Problem,Developer Tools,"documentation",2026-07-15T12:35:00Z
+TKT-1014,Data export is extremely slow,"Our nightly data export is slow and failed twice this week.",en,Technical Support,Medium,Problem,Logistics,"performance",2026-07-15T13:02:00Z
+TKT-1015,Remove former employee access,"Please disable a former employee and reset all active sessions today.",en,Account Access,High,Request,Legal,"account access,offboarding",2026-07-15T13:27:00Z
+TKT-1016,Possible fraudulent card payment,"A customer disputes this charge and believes the card payment is fraud.",en,Security,High,Incident,Financial Services,"billing dispute,security",2026-07-15T13:44:00Z
+TKT-1017,Webhook setup help,"How can I enable webhooks for account updates? The documentation is unclear.",en,Technical Support,Low,Question,SaaS,"api,how-to",2026-07-15T14:05:00Z
+TKT-1018,Training for new agents,"We need onboarding and training materials for six new support agents.",en,Customer Success,Low,Request,Insurance,"training,onboarding",2026-07-15T14:30:00Z
+TKT-1019,Unbekannter Fehler bei Anmeldung,"Die Anmeldung ist fehlgeschlagen und das Konto scheint gesperrt zu sein.",de,Account Access,Medium,Problem,Automotive,"account access",2026-07-15T14:51:00Z
+TKT-1020,Ajuda para acessar a conta,"Não consigo acessar minha conta depois de trocar a senha.",pt,Account Access,Medium,Problem,Travel,"account access",2026-07-15T15:13:00Z
+TKT-1021,Critical malware alert,"Endpoint monitoring found malware on a production workstation. We need urgent containment.",en,Security,High,Incident,Healthcare,"security,malware",2026-07-15T15:39:00Z
+TKT-1022,Change payment method,"Where do I replace the credit card used for our subscription payment?",en,Billing,Low,Question,Nonprofit,"billing,subscription",2026-07-15T16:00:00Z
+TKT-1023,Enable sandbox environment,"Please add a sandbox workspace for our integration testing team.",en,Technical Support,Medium,Request,E-commerce,"api,feature",2026-07-15T16:22:00Z
+TKT-1024,Dashboard not loading,"The analytics dashboard is not working and shows a blank page after login.",en,Technical Support,Medium,Problem,Media,"bug,analytics",2026-07-15T16:45:00Z
+TKT-1025,Account ownership transfer,"How do we transfer the administrator role to a different employee?",en,Account Access,Medium,Question,Professional Services,"account access,admin",2026-07-15T17:04:00Z
+TKT-1026,Cancel and credit renewal,"Please cancel the automatic renewal and credit the invoice generated yesterday.",en,Billing,Medium,Request,Retail,"billing dispute,subscription",2026-07-15T17:28:00Z
+TKT-1027,SSO certificate expires tomorrow,"Our production SSO certificate expires tomorrow and users may be locked out.",en,Account Access,High,Incident,Government,"account access,security",2026-07-15T17:51:00Z
+TKT-1028,Request product roadmap,"Can you share which reporting upgrades are planned this quarter?",en,Customer Success,Low,Question,SaaS,"product question",2026-07-15T18:15:00Z
+TKT-1029,Integration rate limit question,"What is the API rate limit and where can we see current usage?",en,Technical Support,Low,Question,Developer Tools,"api,documentation",2026-07-15T18:33:00Z
+TKT-1030,Unauthorized invoice recipient,"A former vendor received our confidential invoice. This may be an unauthorized disclosure.",en,Security,High,Incident,Legal,"security,billing dispute",2026-07-15T18:57:00Z
+
