@@ -200,7 +200,7 @@ pytest -q
 
 ---
 
-## 🌹 Portfolio angle
+## 🌹Idea angle
 
 This project is strongest when presented as a **workflow-governance product**, not a translation or classification demo.
 
